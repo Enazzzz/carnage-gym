@@ -6,7 +6,7 @@ using UnityEngine;
 namespace CarnageGym
 {
 	/// <summary>
-	/// Finds the local Lincoln and the CPU, then fires the game's training reset.
+	/// Finds the local fighter and the CPU, then presses the match's Rematch object.
 	/// </summary>
 	public sealed class MatchDriver
 	{
@@ -31,7 +31,7 @@ namespace CarnageGym
 		bool _probed;
 
 		/// <summary>
-		/// Check the loaded match. On success, the reset object is toggled so OnEnable runs.
+		/// Check the loaded match. On success, Rematch is pressed so the game restarts the round.
 		/// </summary>
 		public string BeginReset(int cpuLevel, float timeScale)
 		{
@@ -60,11 +60,9 @@ namespace CarnageGym
 			}
 			if (locals != 1 || npcs != 1)
 				return "need_one_cpu";
-			if (!SameCharacter(agent, cpu))
-				return "character_mismatch";
-			var resets = SceneComponents("trainingModeReset");
-			if (resets.Count == 0)
-				return "training_reset_missing";
+			var rematch = FindRematch();
+			if (rematch == null)
+				return "rematch_missing";
 			Agent = agent;
 			Cpu = cpu;
 			AgentBasic = BasicOn(agent);
@@ -82,11 +80,48 @@ namespace CarnageGym
 				level = CpuMax;
 			AssignLevel(cpu, level);
 			Time.timeScale = Mathf.Clamp(timeScale, 1f, 8f);
-			var resetObject = ((Component)resets[0]).gameObject;
-			resetObject.SetActive(false);
-			resetObject.SetActive(true);
-			Debug.Log("character_ids " + Fields.Read(agent, "characterID") + " " + Fields.Read(cpu, "characterID"));
+			Press(rematch);
+			Debug.Log("rematch character_ids " + Fields.Read(agent, "characterID") + " " + Fields.Read(cpu, "characterID"));
 			return null;
+		}
+
+		/// <summary>
+		/// The local Rematch button in the active scene. Online rematch objects are left alone.
+		/// </summary>
+		static GameObject FindRematch()
+		{
+			GameObject fallback = null;
+			var active = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+			foreach (var obj in Resources.FindObjectsOfTypeAll<GameObject>())
+			{
+				if (obj == null || obj.name != "Rematch" || !obj.scene.IsValid())
+					continue;
+				if (obj.scene == active)
+					return obj;
+				fallback = obj;
+			}
+			return fallback;
+		}
+
+		/// <summary>
+		/// Wake the button's parents, then toggle it so its OnEnable handler runs.
+		/// </summary>
+		static void Press(GameObject rematch)
+		{
+			var chain = new List<GameObject>();
+			var current = rematch.transform;
+			while (current != null)
+			{
+				chain.Add(current.gameObject);
+				current = current.parent;
+			}
+			for (int i = chain.Count - 1; i >= 0; i--)
+			{
+				if (!chain[i].activeSelf)
+					chain[i].SetActive(true);
+			}
+			rematch.SetActive(false);
+			rematch.SetActive(true);
 		}
 
 		/// <summary>
@@ -147,15 +182,6 @@ namespace CarnageGym
 				Fields.Write(menu, "integer", level);
 			int readBack = Mathf.RoundToInt(Fields.AsFloat(field.GetValue(cpu)));
 			return readBack == level;
-		}
-
-		static bool SameCharacter(object agent, object cpu)
-		{
-			var left = Fields.Read(agent, "characterID");
-			var right = Fields.Read(cpu, "characterID");
-			if (left == null || right == null)
-				return false;
-			return left.ToString() == right.ToString();
 		}
 
 		static object BasicOn(object player)

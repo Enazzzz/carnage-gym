@@ -14,7 +14,7 @@ from trainer.stack import OBS_LEN, ObsStack
 
 
 LAUNCH_MESSAGE = (
-	"Launch Electoral Carnage with CarnageGym and open Lincoln versus Lincoln CPU training."
+	"Open a local match against Roosevelt, with CarnageGym running, before training."
 )
 
 

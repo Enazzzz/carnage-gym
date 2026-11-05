@@ -225,7 +225,7 @@ namespace CarnageGym
 		bool RequiredFields()
 		{
 			string[] playerFields = {
-				"health", "maxHealth", "superCharge", "superCost", "superReady", "hit", "hitting",
+				"health", "maxHealth", "superCharge", "superCost", "superReady", "hit",
 				"facing", "movementBound", "cpuLevel", "npc", "characterID", "zeroHealth"
 			};
 			foreach (var field in playerFields)
@@ -236,7 +236,7 @@ namespace CarnageGym
 					return false;
 				}
 			}
-			string[] basicFields = { "airborn", "dashing", "running", "inputs" };
+			string[] basicFields = { "airborn", "dashing", "running", "inputs", "hitting" };
 			foreach (var field in basicFields)
 			{
 				if (!Fields.Exists("BasicCharacterScript", field))
@@ -244,11 +244,6 @@ namespace CarnageGym
 					Logger.LogError("Missing field BasicCharacterScript." + field);
 					return false;
 				}
-			}
-			if (AccessTools.TypeByName("trainingModeReset") == null)
-			{
-				Logger.LogError("Missing type trainingModeReset");
-				return false;
 			}
 			return true;
 		}

@@ -1,4 +1,4 @@
-"""PPO training loop for Lincoln versus the built-in CPU."""
+	"""PPO training loop. The opponent is the Roosevelt already in the match."""
 
 import argparse
 import csv
@@ -78,7 +78,7 @@ def _append_progress(path, row) -> None:
 
 def main(argv=None) -> None:
 	"""Connect to a running game and train."""
-	parser = argparse.ArgumentParser(description="Train Lincoln against the built-in CPU.")
+	parser = argparse.ArgumentParser(description="Train against the Roosevelt already in the local match.")
 	parser.add_argument("--timesteps", type=int, default=2_000_000)
 	parser.add_argument("--cpu-start", type=int, default=0)
 	parser.add_argument("--time-scale", type=float, default=3.0)
@@ -91,6 +91,7 @@ def main(argv=None) -> None:
 		port=args.port,
 		cpu_level=args.cpu_start,
 		time_scale=args.time_scale,
+		connect_timeout=90.0,
 	)
 	try:
 		_obs, info = env.reset()

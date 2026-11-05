@@ -1,17 +1,15 @@
 # Carnage Gym
 
-A local trainer for Lincoln in [Electoral Carnage](https://store.steampowered.com/app/3706810/Electoral_Carnage/). The Steam game stays the simulator. A BepInEx plugin reads on-screen state and presses buttons. Python PPO learns against the built-in CPU.
+A local trainer for Electoral Carnage. The Steam game stays the simulator. A BepInEx plugin reads on-screen state and presses buttons. Python PPO learns in a local match whose opponent is Roosevelt.
 
-Online matches are untouched. The plugin does not patch network input.
+Online matches are untouched. The plugin does not patch network input, and it does not click through menus.
 
 ## What you do in the game
 
 1. Launch Electoral Carnage with the plugin installed.
-2. Open local training.
-3. Pick Lincoln versus the Lincoln CPU.
-4. Leave that match on screen, then start the trainer.
-
-The plugin will not click through menus. Both fighters must share a character id, and exactly one side must be the CPU.
+2. Set up a local match yourself, with Roosevelt as the CPU.
+3. Get the first round actually running.
+4. Start the trainer. Between rounds it presses Rematch.
 
 ## Install the plugin
 
@@ -19,13 +17,19 @@ Game folder on this machine:
 
 `C:\Program Files (x86)\Steam\steamapps\common\Electoral Carnage`
 
-BepInEx 5.4.23.2 x64 unpacks to `third_party/BepInEx_win_x64_5.4.23.2/`. Copy these into the game folder:
+BepInEx 5.4.23.2 cannot boot this Unity 6 game through `winhttp.dll`. That proxy crashes in `WinHttpWriteProxySettings` before the game window appears. Use Doorstop 4.6.0's `x64/winhttp.dll` renamed to `dxgi.dll` in the game folder, and do not leave a `winhttp.dll` or `version.dll` proxy next to the exe.
 
-- `winhttp.dll`
-- `doorstop_config.ini`
+Copy into the game folder:
+
+- `dxgi.dll` (Doorstop 4.6.0, the file shipped as `x64/winhttp.dll`)
+- `doorstop_config.ini` from BepInEx, with `target_assembly=BepInEx\core\BepInEx.Preloader.dll`
 - the `BepInEx` directory
 
-Launch the game once so BepInEx creates `BepInEx/plugins`. Build the plugin and copy the DLL:
+Get the first local match against Roosevelt running, then:
+
+```powershell
+python -m trainer.train --timesteps 2000000
+```
 
 ```powershell
 dotnet build plugin/CarnageGym/CarnageGym.csproj -c Release
@@ -34,7 +38,7 @@ Copy-Item plugin/CarnageGym/bin/Release/CarnageGym.dll "C:\Program Files (x86)\S
 
 Restart the game. The BepInEx log should contain `CarnageGym listening on 127.0.0.1:47831`.
 
-To uninstall, delete `winhttp.dll`, `doorstop_config.ini`, and the `BepInEx` folder from the game directory, then restart Steam's copy of the game.
+To uninstall, delete `dxgi.dll`, `doorstop_config.ini`, and the `BepInEx` folder from the game directory. If a `winhttp.dll` or `version.dll` proxy is still next to the exe, delete that too. Then restart the game from Steam.
 
 ## Train
 
@@ -50,7 +54,7 @@ The first milestone is a greedy eval of 50 rounds at the easiest CPU level and t
 
 ## Smoke test
 
-With Lincoln versus Lincoln CPU training already open:
+With the local match against Roosevelt already running:
 
 1. A `ping` on port 47831 returns `"ok": true`.
 2. `reset` returns 29 finite floats and both health values at least 0.99.

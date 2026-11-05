@@ -1,19 +1,19 @@
 # Carnage Gym Design
 
-Train a small PPO policy to play Lincoln in the installed Steam build of Electoral Carnage. The game stays the simulator. A BepInEx plugin is the eyes and hands. A Python process is the brain. Training is local only.
+Train a small PPO policy in a local Electoral Carnage match. You set up the first round, with Roosevelt as the CPU. After that the plugin presses Rematch. The game stays the simulator. A BepInEx plugin is the eyes and hands. A Python process is the brain. Training is local only.
 
 ## Goal
 
-Lincoln beats the built-in Lincoln CPU in local training mode, starting at the easiest difficulty that the game will accept and climbing while it keeps winning. The policy sees only state a player can see, and it presses the same buttons a player presses.
+The policy beats the Roosevelt CPU in the local match you started, climbing difficulty while it keeps winning. It sees only state a player can see, and it presses the same buttons a player presses.
 
 The first milestone is plumbing plus a real result: a greedy policy wins at least 70% of 50 rounds at the easiest CPU level. Climbing the remaining levels is the same loop, not a second project.
 
 ## Out of scope
 
 - Online matches, rollback input, and the network input path.
-- Any character other than Lincoln versus Lincoln.
+- The agent can be whichever fighter you put on the local side. Roosevelt is the CPU.
 - Self-play, and a mode whose job is fighting a local human. The local input path must not block those later.
-- Menu automation. The person training opens local training, selects Lincoln versus the Lincoln CPU, and leaves that match up.
+- Menu automation. You get the first local round running. Later rounds press Rematch.
 - Rebuilding the game, copying its assets, or committing decompiled game code.
 - Reading the CPU's planned commands, the opponent's raw input packet, or numeric lag and frame data.
 
@@ -26,7 +26,7 @@ Two processes on one machine.
 
 They talk newline-delimited JSON over TCP `127.0.0.1:47831`. The plugin listens. The trainer connects. One client at a time.
 
-On reset, the plugin asks the game's own training-reset object to restart the round, then returns the first observation. On step, the trainer sends one discrete action. The plugin holds that button state for 3 rendered frames and replies with the new observation, a reward, and whether the round ended.
+On reset, the plugin presses the scene object named `Rematch`, then returns the first observation once both health bars are full again. On step, the trainer sends one discrete action. The plugin holds that button state for 3 rendered frames and replies with the new observation, a reward, and whether the round ended.
 
 `Time.timeScale` is set to the trainer's requested scale, clamped to `[1, 8]`. Training requests 3. Scoring runs request 1. If the game ignores time scale, decisions are still counted in game frames, so learning stays valid at 1x. The log records the scale actually set.
 
@@ -37,11 +37,10 @@ The policy is a 2-layer MLP, 128 units each. It runs in Python. This version doe
 The plugin does not click through menus. Reset succeeds only when a match is already loaded and all of the following are true:
 
 - Exactly two `PlayerInfo` objects exist.
-- Exactly one of them has `npc == false` (the agent) and one has `npc == true` (the CPU).
-- Both `characterID` values are equal. The operator is responsible for that pair being Lincoln. A mismatch returns error `character_mismatch`.
-- A `trainingModeReset` behaviour is loaded.
+- Exactly one of them has `npc == false` (the agent) and one has `npc == true` (Roosevelt).
+- A scene object named `Rematch` is loaded. Online rematch objects are not used.
 
-Reset enables that behaviour's GameObject so the game runs its own `OnEnable` / `FixedUpdate` reset, then waits up to 600 rendered frames for both health fractions to be at least 0.99. If that wait expires, the response is `ok: false` with error `reset_timeout`.
+Reset enables that object's parents if they are inactive, toggles the object so its own handler runs, then waits up to 600 rendered frames for both health fractions to be at least 0.99. If that wait expires, the response is `ok: false` with error `reset_timeout`.
 
 CPU difficulty is `PlayerInfo.cpuLevel` on the NPC. The trainer sends an integer. The plugin writes it on reset. Startup probing tries the integers 0 through 10 and keeps each value that reads back unchanged. The minimum and maximum accepted values bound the curriculum. `cpuLevel` is never part of the policy input.
 
@@ -167,13 +166,12 @@ Error strings:
 | Error | Meaning |
 | --- | --- |
 | `need_one_cpu` | Not exactly one NPC and one local player |
-| `character_mismatch` | The two fighters have different `characterID` values |
-| `training_reset_missing` | No `trainingModeReset` behaviour is loaded |
+| `rematch_missing` | No scene object named `Rematch` is loaded |
 | `reset_timeout` | Health did not recover within 600 frames |
 | `bad_action` | Action outside 0..53 |
 | `players_not_ready` | A step arrived with no live pair of fighters |
 
-The trainer retries a failed reset up to 3 times. After that it raises and stops. A dropped connection retries for 30 seconds, then raises `GameConnectionError` with the text `Launch Electoral Carnage with CarnageGym and open Lincoln versus Lincoln CPU training.`
+The trainer retries a failed reset up to 3 times. After that it raises and stops. A dropped connection retries for 30 seconds, then raises `GameConnectionError` with the text `Open a local match against Roosevelt, with CarnageGym running, before training.`
 
 ## Plugin shape
 
@@ -206,7 +204,7 @@ The C# `ActionCodec` is tested without Unity. Action 0 is neutral with every but
 
 Game smoke, run by hand once the plugin builds:
 
-1. Launch the game with BepInEx, open Lincoln versus Lincoln CPU training.
+1. Launch the game with BepInEx, get a local match against Roosevelt running.
 2. `ping` returns `ok: true`.
 3. `reset` returns 29 finite floats and both health info values at least 0.99.
 4. Ten random-action rounds each return `done: true` with a winner string.

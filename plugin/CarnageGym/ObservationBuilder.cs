@@ -89,8 +89,8 @@ namespace CarnageGym
 			values[19] = Flag(cpuBasic, "dashing");
 			values[20] = Flag(agent, "hit");
 			values[21] = Flag(cpu, "hit");
-			values[22] = Flag(agent, "hitting");
-			values[23] = Flag(cpu, "hitting");
+			values[22] = Flag(agentBasic, "hitting");
+			values[23] = Flag(cpuBasic, "hitting");
 			values[24] = Flag(agentBasic, "running");
 			values[25] = Flag(cpuBasic, "running");
 			float relX = cpuScaledX - agentScaledX;
