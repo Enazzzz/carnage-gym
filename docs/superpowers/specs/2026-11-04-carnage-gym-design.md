@@ -160,7 +160,7 @@ Responses:
 {"ok":false,"error":"need_one_cpu","obs":[0.0],"reward":0.0,"done":true,"info":{}}
 ```
 
-`obs` on success has length 29. Examples above write `[0.0]` as a stand-in for that full array. On failure the array is 29 zeros. `winner` is `null` until the round ends, then `agent`, `cpu`, `draw`, or `timeout`. `game_seconds` is decisions times `3 / 60`.
+`obs` on success has length 29. Examples above write `[0.0]` as a stand-in for that full array. On failure the array is 29 zeros. `winner` is `null` until the round ends, then `agent`, `cpu`, `draw`, or `timeout`. `game_seconds` is decisions times `3 / 60`. Successful resets also include `cpu_min` and `cpu_max`, the probed difficulty bounds.
 
 Error strings:
 
