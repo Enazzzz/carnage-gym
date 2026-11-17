@@ -27,6 +27,11 @@ namespace CarnageGym
 		bool _working;
 		int _holdLeft;
 		int _resetFrames;
+		int _resetPhase;
+		int _resetLevel;
+		float _resetScale;
+		UnityEngine.Object _seenAgent;
+		UnityEngine.Object _seenCpu;
 		int _decisions;
 		bool _inRound;
 
@@ -107,15 +112,18 @@ namespace CarnageGym
 				return Protocol.Ok(true, new float[29], false, null, null, 0, _match.CpuMin, _match.CpuMax, 1f, 0f, 0f, 0f);
 			if (command.Name == "reset")
 			{
-				var error = _match.BeginReset(command.CpuLevel, command.TimeScale);
-				if (error != null)
-					return Protocol.Error(error);
-				_eyes.ResetHistory();
+				// Finding the fighters and the post-rematch reload both take a while.
+				// Continue waits instead of failing on the first frame.
+				_resetLevel = command.CpuLevel;
+				_resetScale = command.TimeScale;
+				_resetPhase = 0;
 				_resetFrames = 0;
 				_holdLeft = 0;
 				_decisions = 0;
 				_inRound = false;
+				_eyes.ResetHistory();
 				InputForcer.Release();
+				_match.ReleaseFighters();
 				return null;
 			}
 			if (command.Name == "step")
@@ -138,6 +146,17 @@ namespace CarnageGym
 			return Protocol.Error("bad_json");
 		}
 
+		/// <summary>
+		/// True when both references are the same live Unity object.
+		/// </summary>
+		static bool SameObject(object instance, UnityEngine.Object seen)
+		{
+			var unity = instance as UnityEngine.Object;
+			if (unity == null || seen == null)
+				return false;
+			return unity == seen;
+		}
+
 		string Continue()
 		{
 			if (_holdLeft > 0)
@@ -151,17 +170,72 @@ namespace CarnageGym
 				return FinishStep();
 			}
 			_resetFrames += 1;
-			// Give the game's own FixedUpdate a couple of frames before trusting full health.
-			if (_resetFrames < 2)
-				return null;
-			if (_match.HealthRecovered())
+			if (_resetPhase == 0)
+				return WaitForMatch();
+			return WaitForRematch();
+		}
+
+		/// <summary>
+		/// Wait until slot 1 and slot 2 are actually in the match, then press rematch once.
+		/// </summary>
+		string WaitForMatch()
+		{
+			var roster = _match.TryBind();
+			if (roster != null)
 			{
-				_inRound = true;
-				_eyes.ResetHistory();
-				return Live(false, null);
+				if (_resetFrames == 1 || _resetFrames % 120 == 0)
+					Logger.LogInfo(roster);
+				// About 20 seconds at 60 fps. The match can still be loading.
+				if (_resetFrames >= 1200)
+					return Protocol.Error(roster);
+				return null;
 			}
-			if (_resetFrames >= 600)
-				return Protocol.Error("reset_timeout");
+			_match.ApplyLevel(_resetLevel, _resetScale);
+			_seenAgent = _match.Agent as UnityEngine.Object;
+			_seenCpu = _match.Cpu as UnityEngine.Object;
+			if (!_match.PressRematch())
+			{
+				if (_resetFrames >= 1200)
+					return Protocol.Error("rematch_missing");
+				return null;
+			}
+			_match.ReleaseFighters();
+			_resetPhase = 1;
+			_resetFrames = 0;
+			return null;
+		}
+
+		/// <summary>
+		/// Rematch reloads the round. Wait until the new fighters are back at full health.
+		/// </summary>
+		string WaitForRematch()
+		{
+			// The reload does not finish on the same frame the flag is set.
+			if (_resetFrames < 30)
+				return null;
+			var roster = _match.TryBind();
+			if (roster == null)
+			{
+				// The fighters from before the reload are still the old round.
+				bool sameRound = SameObject(_match.Agent, _seenAgent) || SameObject(_match.Cpu, _seenCpu);
+				if (!sameRound)
+				{
+					_match.ApplyLevel(_resetLevel, _resetScale);
+					if (_match.HealthRecovered())
+					{
+						_inRound = true;
+						_eyes.ResetHistory();
+						return Live(false, null);
+					}
+				}
+			}
+			else if (_resetFrames % 120 == 0)
+			{
+				Logger.LogInfo(roster);
+			}
+			// About 45 seconds for the scene reload and the health bars to fill.
+			if (_resetFrames >= 2700)
+				return Protocol.Error(roster ?? "reset_timeout");
 			return null;
 		}
 

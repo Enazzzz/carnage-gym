@@ -135,7 +135,7 @@ namespace CarnageGym
 							_pending = line;
 							_response = null;
 						}
-						if (!_responseReady.WaitOne(60000))
+						if (!_responseReady.WaitOne(120000))
 						{
 							var timeout = Protocol.Error("timeout");
 							var bytes = Encoding.UTF8.GetBytes(timeout + "\n");

@@ -55,11 +55,18 @@ class CarnageEnv(gym.Env):
 		self._still = 0
 		self._stall_latched = False
 		self._scale_dropped = False
+		self._announced_wait = False
 
 	def reset(self, *, seed=None, options=None):
 		"""Restart the round. Failed resets are retried up to ``max_resets``."""
 		super().reset(seed=seed)
 		self._ensure_connection()
+		if not self._announced_wait:
+			print(
+				"Waiting for player 1 and the Roosevelt CPU. Rematch runs once they are both in.",
+				flush=True,
+			)
+			self._announced_wait = True
 		if self._stall_latched and not self._scale_dropped:
 			self.time_scale = 1.0
 			self._scale_dropped = True
@@ -120,7 +127,7 @@ class CarnageEnv(gym.Env):
 				raise GameConnectionError(LAUNCH_MESSAGE)
 			try:
 				sock = socket.create_connection((self.host, self.port), timeout=min(2.0, remaining))
-				sock.settimeout(5)
+				sock.settimeout(120)
 				self._sock = sock
 				self._buffer = b""
 				return

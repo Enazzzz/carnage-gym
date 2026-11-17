@@ -1,4 +1,4 @@
-	"""PPO training loop. The opponent is the Roosevelt already in the match."""
+"""PPO training loop. The opponent is the Roosevelt already in the match."""
 
 import argparse
 import csv

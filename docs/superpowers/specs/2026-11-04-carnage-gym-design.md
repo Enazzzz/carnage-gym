@@ -37,10 +37,11 @@ The policy is a 2-layer MLP, 128 units each. It runs in Python. This version doe
 The plugin does not click through menus. Reset succeeds only when a match is already loaded and all of the following are true:
 
 - Exactly two `PlayerInfo` objects exist.
-- Exactly one of them has `npc == false` (the agent) and one has `npc == true` (Roosevelt).
-- A scene object named `Rematch` is loaded. Online rematch objects are not used.
+- Player slot 1 is the agent and slot 2 is Roosevelt. A local CPU is slot 2. The `npc` flag is not that marker.
+- If those slots are missing and exactly two fighters are live, the `npc` fighter is the CPU.
+- Reset waits for both fighters instead of failing on the first frame, then sets `newRematch.doRematch`.
 
-Reset enables that object's parents if they are inactive, toggles the object so its own handler runs, then waits up to 600 rendered frames for both health fractions to be at least 0.99. If that wait expires, the response is `ok: false` with error `reset_timeout`.
+Reset waits about 20 seconds for both fighters. It then sets `newRematch.doRematch` and waits about 45 seconds for the reloaded round to put both health fractions at 0.99 or above. The fighters who were already on screen do not count as that new round. If either wait expires, the response is `ok: false`.
 
 CPU difficulty is `PlayerInfo.cpuLevel` on the NPC. The trainer sends an integer. The plugin writes it on reset. Startup probing tries the integers 0 through 10 and keeps each value that reads back unchanged. The minimum and maximum accepted values bound the curriculum. `cpuLevel` is never part of the policy input.
 

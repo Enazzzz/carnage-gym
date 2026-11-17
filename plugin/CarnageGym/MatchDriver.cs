@@ -31,46 +31,43 @@ namespace CarnageGym
 		bool _probed;
 
 		/// <summary>
-		/// Check the loaded match. On success, Rematch is pressed so the game restarts the round.
+		/// Drop fighter references after a rematch reload.
 		/// </summary>
-		public string BeginReset(int cpuLevel, float timeScale)
+		public void ReleaseFighters()
 		{
 			Agent = null;
 			Cpu = null;
 			AgentBasic = null;
 			CpuBasic = null;
-			var players = SceneComponents("PlayerInfo");
-			object agent = null;
-			object cpu = null;
-			int locals = 0;
-			int npcs = 0;
-			foreach (var player in players)
-			{
-				bool npc = Fields.AsBool(Fields.Read(player, "npc"));
-				if (npc)
-				{
-					npcs += 1;
-					cpu = player;
-				}
-				else
-				{
-					locals += 1;
-					agent = player;
-				}
-			}
-			if (locals != 1 || npcs != 1)
-				return "need_one_cpu";
-			var rematch = FindRematch();
-			if (rematch == null)
-				return "rematch_missing";
-			Agent = agent;
-			Cpu = cpu;
-			AgentBasic = BasicOn(agent);
-			CpuBasic = BasicOn(cpu);
+			InputForcer.Agent = null;
+		}
+
+		/// <summary>
+		/// Bind player slot 1 as the agent and slot 2 as Roosevelt.
+		/// A local CPU is slot 2. The npc flag is not how that match marks the CPU.
+		/// Returns null when both live fighters are bound, otherwise a roster for the log.
+		/// </summary>
+		public string TryBind()
+		{
+			ReleaseFighters();
+			var active = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+			var roster = Describe(active);
+			if (!BindSlots(active, true) && !BindSlots(active, false) && !BindPair(active))
+				return roster;
 			InputForcer.Agent = AgentBasic;
+			return null;
+		}
+
+		/// <summary>
+		/// Write the CPU level onto the live fighter and the objects rematch copies from.
+		/// </summary>
+		public void ApplyLevel(int cpuLevel, float timeScale)
+		{
+			if (Cpu == null)
+				return;
 			if (!_probed)
 			{
-				Probe(cpu);
+				Probe(Cpu);
 				_probed = true;
 			}
 			int level = cpuLevel;
@@ -78,11 +75,40 @@ namespace CarnageGym
 				level = CpuMin;
 			if (level > CpuMax)
 				level = CpuMax;
-			AssignLevel(cpu, level);
+			AssignLevel(Cpu, level);
+			foreach (var carrier in SceneComponents("bigEnabler"))
+				Fields.Write(carrier, "cpuLevel", level);
+			foreach (var carrier in SceneComponents("newRematch"))
+				Fields.Write(carrier, "cpuLevel", level);
 			Time.timeScale = Mathf.Clamp(timeScale, 1f, 8f);
-			Press(rematch);
-			Debug.Log("rematch character_ids " + Fields.Read(agent, "characterID") + " " + Fields.Read(cpu, "characterID"));
-			return null;
+		}
+
+		/// <summary>
+		/// Set newRematch.doRematch, which is what the rematch button turns on.
+		/// </summary>
+		public bool PressRematch()
+		{
+			bool fired = false;
+			foreach (var rematch in SceneComponents("newRematch"))
+			{
+				var component = rematch as Component;
+				if (component == null)
+					continue;
+				Wake(component.gameObject);
+				Fields.Write(rematch, "doRematch", true);
+				fired = true;
+			}
+			if (fired)
+			{
+				Debug.Log("rematch pressed character_ids " + Fields.Read(Agent, "characterID") + " " + Fields.Read(Cpu, "characterID"));
+				return true;
+			}
+			var button = FindRematch();
+			if (button == null)
+				return false;
+			Press(button);
+			Debug.Log("rematch button character_ids " + Fields.Read(Agent, "characterID") + " " + Fields.Read(Cpu, "characterID"));
+			return true;
 		}
 
 		/// <summary>
@@ -108,8 +134,18 @@ namespace CarnageGym
 		/// </summary>
 		static void Press(GameObject rematch)
 		{
+			Wake(rematch);
+			rematch.SetActive(false);
+			rematch.SetActive(true);
+		}
+
+		/// <summary>
+		/// Enable a button and its parents so its Update can see doRematch.
+		/// </summary>
+		static void Wake(GameObject obj)
+		{
 			var chain = new List<GameObject>();
-			var current = rematch.transform;
+			var current = obj.transform;
 			while (current != null)
 			{
 				chain.Add(current.gameObject);
@@ -120,8 +156,6 @@ namespace CarnageGym
 				if (!chain[i].activeSelf)
 					chain[i].SetActive(true);
 			}
-			rematch.SetActive(false);
-			rematch.SetActive(true);
 		}
 
 		/// <summary>
@@ -182,6 +216,106 @@ namespace CarnageGym
 				Fields.Write(menu, "integer", level);
 			int readBack = Mathf.RoundToInt(Fields.AsFloat(field.GetValue(cpu)));
 			return readBack == level;
+		}
+
+		bool BindSlots(UnityEngine.SceneManagement.Scene active, bool activeSceneOnly)
+		{
+			object agent = null;
+			object cpu = null;
+			int locals = 0;
+			int opponents = 0;
+			foreach (var player in SceneComponents("PlayerInfo"))
+			{
+				if (!Live(player, active, activeSceneOnly))
+					continue;
+				int slot = Mathf.RoundToInt(Fields.AsFloat(Fields.Read(player, "player")));
+				if (slot == 1)
+				{
+					locals += 1;
+					agent = player;
+				}
+				else if (slot == 2)
+				{
+					opponents += 1;
+					cpu = player;
+				}
+			}
+			if (locals != 1 || opponents != 1)
+				return false;
+			Remember(agent, cpu);
+			return true;
+		}
+
+		/// <summary>
+		/// When the match did not stamp slots, accept exactly two live fighters.
+		/// The npc fighter is the CPU. Otherwise the higher player id is the CPU.
+		/// </summary>
+		bool BindPair(UnityEngine.SceneManagement.Scene active)
+		{
+			var live = new List<object>();
+			foreach (var player in SceneComponents("PlayerInfo"))
+			{
+				if (Live(player, active, true))
+					live.Add(player);
+			}
+			if (live.Count != 2)
+				return false;
+			object agent = live[0];
+			object cpu = live[1];
+			bool firstNpc = Fields.AsBool(Fields.Read(live[0], "npc"));
+			bool secondNpc = Fields.AsBool(Fields.Read(live[1], "npc"));
+			if (firstNpc != secondNpc)
+			{
+				agent = firstNpc ? live[1] : live[0];
+				cpu = firstNpc ? live[0] : live[1];
+			}
+			else if (Slot(live[1]) < Slot(live[0]))
+			{
+				agent = live[1];
+				cpu = live[0];
+			}
+			Remember(agent, cpu);
+			return true;
+		}
+
+		static int Slot(object player)
+		{
+			return Mathf.RoundToInt(Fields.AsFloat(Fields.Read(player, "player")));
+		}
+
+		void Remember(object agent, object cpu)
+		{
+			Agent = agent;
+			Cpu = cpu;
+			AgentBasic = BasicOn(agent);
+			CpuBasic = BasicOn(cpu);
+		}
+
+		static bool Live(object player, UnityEngine.SceneManagement.Scene active, bool activeSceneOnly)
+		{
+			var component = player as Component;
+			if (component == null || component.gameObject == null)
+				return false;
+			if (!component.gameObject.scene.IsValid() || !component.gameObject.activeInHierarchy)
+				return false;
+			if (activeSceneOnly && component.gameObject.scene != active)
+				return false;
+			return true;
+		}
+
+		static string Describe(UnityEngine.SceneManagement.Scene active)
+		{
+			var text = "need_one_cpu";
+			foreach (var player in SceneComponents("PlayerInfo"))
+			{
+				if (!Live(player, active, false))
+					continue;
+				int slot = Mathf.RoundToInt(Fields.AsFloat(Fields.Read(player, "player")));
+				bool npc = Fields.AsBool(Fields.Read(player, "npc"));
+				var id = Fields.Read(player, "characterID");
+				text += " slot=" + slot + " npc=" + npc + " id=" + id;
+			}
+			return text;
 		}
 
 		static object BasicOn(object player)
